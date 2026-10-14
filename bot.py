@@ -38,67 +38,13 @@ def set_user_lang(user_id: int, lang: str):
     conn.commit()
     conn.close()
 
-def get_user_lang(user_id: int) -> str:
-    conn = sqlite3.connect("bolajon_bot.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT language FROM users WHERE user_id = ?", (user_id,))
-    res = cursor.fetchone()
-    conn.close()
-    return res[0] if res else "uz"
-
-# --- Matnlar va Tugmalar ---
-TEXTS = {
-    "uz": {
-        "welcome": "👶 **'Bolajon' pediatriya va tibbiy ta'lim botiga xush kelibsiz!**\n\nBo'limni tanlang:",
-        "disclaimer": "⚠️ **XAVFSIZLIK OGOHLANTIRISHI:**\nUshbu bot faqat ta'lim va ma'lumot olish maqsadida yaratilgan. Bot bergan ma'lumotlar asosida mustaqil tashxis qo'yish va davolash taqiqlanadi!",
-        "menu_edu": "📚 O'quv materiallari",
-        "menu_dev": "👶 Bolalar rivojlanishi",
-        "menu_clinic": "🏥 Klinik yordam",
-        "menu_calc": "🧮 Kalkulyatorlar",
-        "menu_exam": "📝 Imtihonga tayyorlov",
-        "menu_practice": "📋 Amaliyot va Anamnez",
-        "menu_tools": "⚙️ Sozlamalar va Til",
-        "emergency": "🚨 Shoshilinch holatlar",
-        "lang_select": "Iltimos, tilni tanlang / Пожалуйста, выберите язык:",
-        "back": "⬅️ Orqaga"
-    },
-    "ru": {
-        "welcome": "👶 **Добро пожаловать в бот медицинского образования 'Bolajon'!**\n\nВыберите раздел:",
-        "disclaimer": "⚠️ **ПРЕДУПРЕЖДЕНИЕ:**\nЭтот бот предназначен только для образовательных целей. Самолечение и постановка диагноза запрещены!",
-        "menu_edu": "📚 Учебные материалы",
-        "menu_dev": "👶 Развитие ребенка",
-        "menu_clinic": "🏥 Клиническая помощь",
-        "menu_calc": "🧮 Калькуляторы",
-        "menu_exam": "📝 Подготовка к экзаменам",
-        "menu_practice": "📋 Практика и Анамнез",
-        "menu_tools": "⚙️ Настройки и Язык",
-        "emergency": "🚨 Неотложная помощь",
-        "lang_select": "Выберите язык / Select language:",
-        "back": "⬅️ Назад"
-    },
-    "en": {
-        "welcome": "👶 **Welcome to the 'Bolajon' Pediatric Educational Bot!**\n\nSelect a section:",
-        "disclaimer": "⚠️ **DISCLAIMER:**\nThis bot is for educational purposes only. Self-diagnosis and treatment are strictly prohibited.",
-        "menu_edu": "📚 Educational Materials",
-        "menu_dev": "👶 Child Development",
-        "menu_clinic": "🏥 Clinical Care",
-        "menu_calc": "🧮 Calculators",
-        "menu_exam": "📝 Exam Preparation",
-        "menu_practice": "📋 Practice & History",
-        "menu_tools": "⚙️ Settings & Language",
-        "emergency": "🚨 Emergency Algorithms",
-        "lang_select": "Choose language:",
-        "back": "⬅️ Back"
-    }
-}
-
-def get_main_keyboard(lang: str) -> ReplyKeyboardMarkup:
-    t = TEXTS[lang]
+# --- Asosiy Klaviatura ---
+def get_main_keyboard() -> ReplyKeyboardMarkup:
     kb = [
-        [KeyboardButton(text=t["menu_edu"]), KeyboardButton(text=t["menu_dev"])],
-        [KeyboardButton(text=t["menu_clinic"]), KeyboardButton(text=t["menu_calc"])],
-        [KeyboardButton(text=t["menu_exam"]), KeyboardButton(text=t["menu_practice"])],
-        [KeyboardButton(text=t["emergency"]), KeyboardButton(text=t["menu_tools"])]
+        [KeyboardButton(text="📚 O'quv materiallari"), KeyboardButton(text="👶 Bolalar rivojlanishi")],
+        [KeyboardButton(text="🏥 Klinik yordam"), KeyboardButton(text="🧮 Kalkulyatorlar")],
+        [KeyboardButton(text="📝 Imtihonga tayyorlov"), KeyboardButton(text="📋 Amaliyot va Anamnez")],
+        [KeyboardButton(text="🚨 Shoshilinch holatlar"), KeyboardButton(text="⚙️ Sozlamalar va Til")]
     ]
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
@@ -120,8 +66,9 @@ router = Router()
 async def cmd_start(message: Message):
     init_db()
     await message.answer(
-        TEXTS["uz"]["lang_select"],
-        reply_markup=get_lang_inline()
+        "👶 **'Bolajon' pediatriya va tibbiy ta'lim botiga xush kelibsiz!**\n\nIltimos, tilni tanlang:",
+        reply_markup=get_lang_inline(),
+        parse_mode="Markdown"
     )
 
 @router.callback_query(F.data.startswith("setlang_"))
@@ -130,44 +77,24 @@ async def process_lang_change(callback: CallbackQuery):
     set_user_lang(callback.from_user.id, lang)
     await callback.message.delete()
     await callback.message.answer(
-        TEXTS[lang]["welcome"], 
-        reply_markup=get_main_keyboard(lang),
-        parse_mode="Markdown"
+        "✅ Til muvaffaqiyatli o'zgartirildi!\n\nBo'limni tanlang:", 
+        reply_markup=get_main_keyboard()
     )
-    await callback.message.answer(TEXTS[lang]["disclaimer"], parse_mode="Markdown")
 
 # --- 🚨 Shoshilinch Holatlar ---
-@router.message(F.text.in_([TEXTS["uz"]["emergency"], TEXTS["ru"]["emergency"], TEXTS["en"]["emergency"]]))
+@router.message(F.text.contains("Shoshilinch") | F.text.contains("Неотложная") | F.text.contains("Emergency"))
 async def menu_emergency(message: Message):
-    lang = get_user_lang(message.from_user.id)
-    if lang == "ru":
-        text = (
-            "🚨 **НЕОТЛОЖНАЯ ПОМОЩЬ В ПЕДИАТРИИ:**\n\n"
-            "🔥 **Гипертермия:** Парацетамол 10-15 мг/кг или Ибупрофен 5-10 мг/кг\n"
-            "⚡ **Судороги:** Диазепам 0.1-0.3 мг/кг в/в или ректально\n"
-            "💨 **Круп (Стеноз гортани):** Дексаметазон 0.3-0.6 мг/кг в/м\n"
-            "💧 **Острая дегидратация:** Оральная регидратация (Регидрон) 50-100 мл/кг за 4 часа"
-        )
-    elif lang == "en":
-        text = (
-            "🚨 **PEDIATRIC EMERGENCY ALGORITHMS:**\n\n"
-            "🔥 **Hyperthermia:** Paracetamol 10-15 mg/kg or Ibuprofen 5-10 mg/kg\n"
-            "⚡ **Seizures:** Diazepam 0.1-0.3 mg/kg IV/rectally\n"
-            "💨 **Croup:** Dexamethasone 0.3-0.6 mg/kg IM\n"
-            "💧 **Dehydration:** Oral rehydration solution (ORS) 50-100 ml/kg over 4 hours"
-        )
-    else:
-        text = (
-            "🚨 **SHOSHILINCH HOLATLAR ALGORITMI:**\n\n"
-            "🔥 **Gipertermiya:** Paratsetamol 10-15 mg/kg yoki Ibuprofen 5-10 mg/kg\n"
-            "⚡ **Tutqanoq (Talvasa):** Diazepam 0.1-0.3 mg/kg v/v yoki rektal\n"
-            "💨 **Laringospazm / Krup:** Deksametazon 0.3-0.6 mg/kg m/o\n"
-            "💧 **O'tkir degidratatsiya:** Oral regidratatsiya (Regidron) 4 soatda 50-100 ml/kg"
-        )
+    text = (
+        "🚨 **SHOSHILINCH HOLATLAR ALGORITMI:**\n\n"
+        "🔥 **Gipertermiya:** Paratsetamol 10-15 mg/kg yoki Ibuprofen 5-10 mg/kg\n"
+        "⚡ **Tutqanoq (Talvasa):** Diazepam 0.1-0.3 mg/kg v/v yoki rektal\n"
+        "💨 **Laringospazm / Krup:** Deksametazon 0.3-0.6 mg/kg m/o\n"
+        "💧 **O'tkir degidratatsiya:** Oral regidratatsiya (Regidron) 4 soatda 50-100 ml/kg"
+    )
     await message.answer(text, parse_mode="Markdown")
 
 # --- 📚 O'quv Materiallari ---
-@router.message(F.text.in_([TEXTS["uz"]["menu_edu"], TEXTS["ru"]["menu_edu"], TEXTS["en"]["menu_edu"]]))
+@router.message(F.text.contains("O'quv") | F.text.contains("Учебные") | F.text.contains("Educational"))
 async def menu_edu(message: Message):
     text = (
         "📚 **PEDIATRIYA O'QUV MATERIALLARI:**\n\n"
@@ -178,12 +105,12 @@ async def menu_edu(message: Message):
     await message.answer(text, parse_mode="Markdown")
 
 # --- 👶 Bolalar Rivojlanishi ---
-@router.message(F.text.in_([TEXTS["uz"]["menu_dev"], TEXTS["ru"]["menu_dev"], TEXTS["en"]["menu_dev"]]))
+@router.message(F.text.contains("Bolalar") | F.text.contains("Развитие") | F.text.contains("Child"))
 async def menu_dev(message: Message):
     text = (
         "👶 **BOLALAR RIVOJLANISHI BOSQICHLARI:**\n\n"
         "🔹 **1 oy:** Boshini vaqtincha ushlaydi, tovushga munosabat bildiradi.\n"
-        "🔹 **3 oy:** Boshini tik ushlaydi, "kula boshlaydi" (guleniyediy).\n"
+        "🔹 **3 oy:** Boshini tik ushlaydi, kula boshlaydi.\n"
         "🔹 **6 oy:** O'zi ag'dariladi, yordam bilan o'tiradi, o'yinchoqni ushlaydi.\n"
         "🔹 **9 oy:** Mustaqil o'tiradi, emaklaydi, ilk bo'g'inlarni aytadi.\n"
         "🔹 **12 oy:** Mustaqil yuradi, 3-5 ta sodda so'zlarni aytadi."
@@ -191,7 +118,7 @@ async def menu_dev(message: Message):
     await message.answer(text, parse_mode="Markdown")
 
 # --- 🏥 Klinik Yordam ---
-@router.message(F.text.in_([TEXTS["uz"]["menu_clinic"], TEXTS["ru"]["menu_clinic"], TEXTS["en"]["menu_clinic"]]))
+@router.message(F.text.contains("Klinik") | F.text.contains("Клиническая") | F.text.contains("Clinical"))
 async def menu_clinic(message: Message):
     text = (
         "🏥 **KLINIK YORDAM VA DIAGNOSTIKA:**\n\n"
@@ -202,7 +129,7 @@ async def menu_clinic(message: Message):
     await message.answer(text, parse_mode="Markdown")
 
 # --- 🧮 Kalkulyatorlar ---
-@router.message(F.text.in_([TEXTS["uz"]["menu_calc"], TEXTS["ru"]["menu_calc"], TEXTS["en"]["menu_calc"]]))
+@router.message(F.text.contains("Kalkulyator") | F.text.contains("Калькуляторы") | F.text.contains("Calculators"))
 async def menu_calc(message: Message, state: FSMContext):
     await state.set_state(CalcState.waiting_for_weight)
     await message.answer("🧮 **Dori dozasini hisoblash:**\n\nIltimos, bolaning vaznini (kg da) kiriting (Masalan: `12`):", parse_mode="Markdown")
@@ -223,8 +150,7 @@ async def process_calc_weight(message: Message, state: FSMContext):
         res = (
             f"⚖️ **Bolanining vazni:** {weight} kg\n\n"
             f"💊 **Paratsetamol (bir martalik doza):**\n- Minimal: **{p_min:.1f} mg**\n- Maksimal: **{p_max:.1f} mg**\n\n"
-            f"🧪 **Ibuprofen (bir martalik doza):**\n- Minimal: **{i_min:.1f} mg**\n- Maksimal: **{i_max:.1f} mg**\n\n"
-            f"📌 *Siroplar uchun preparat qutisidagi mg/ml nisbatiga e'tibor bering!*"
+            f"🧪 **Ibuprofen (bir martalik doza):**\n- Minimal: **{i_min:.1f} mg**\n- Maksimal: **{i_max:.1f} mg**"
         )
         await message.answer(res, parse_mode="Markdown")
         await state.clear()
@@ -232,10 +158,10 @@ async def process_calc_weight(message: Message, state: FSMContext):
         await message.answer("⚠️ Iltimos, faqat raqam kiriting (Masalan: 8.5 yoki 14)!")
 
 # --- 📝 Imtihonga Tayyorlov ---
-@router.message(F.text.in_([TEXTS["uz"]["menu_exam"], TEXTS["ru"]["menu_exam"], TEXTS["en"]["menu_exam"]]))
+@router.message(F.text.contains("Imtihon") | F.text.contains("Подготовка") | F.text.contains("Exam"))
 async def menu_exam(message: Message):
     text = (
-        "📝 **PED IATRIYADAN SAVOL-JAVOBLAR:**\n\n"
+        "📝 **PEDIATRIYADAN SAVOL-JAVOBLAR:**\n\n"
         "❓ **Savol:** Yangi tug'ilgan chaqaloqning normal nafas olish chastotasi daqiqasiga nechtani tashkil qiladi?\n"
         "💡 **Javob:** Daqiqasiga 40-60 marta.\n\n"
         "❓ **Savol:** Kattalashgan katta liqildiq qaysi kasallik belgilari hisoblanadi?\n"
@@ -244,7 +170,7 @@ async def menu_exam(message: Message):
     await message.answer(text, parse_mode="Markdown")
 
 # --- 📋 Amaliyot va Anamnez ---
-@router.message(F.text.in_([TEXTS["uz"]["menu_practice"], TEXTS["ru"]["menu_practice"], TEXTS["en"]["menu_practice"]]))
+@router.message(F.text.contains("Amaliyot") | F.text.contains("Практика") | F.text.contains("Practice"))
 async def menu_practice(message: Message):
     text = (
         "📋 **ANAMNEZ YIG'ISH VA AMALIYOT SXEMASI:**\n\n"
@@ -256,14 +182,13 @@ async def menu_practice(message: Message):
     await message.answer(text, parse_mode="Markdown")
 
 # --- ⚙️ Sozlamalar va Til ---
-@router.message(F.text.in_([TEXTS["uz"]["menu_tools"], TEXTS["ru"]["menu_tools"], TEXTS["en"]["menu_tools"]]))
+@router.message(F.text.contains("Sozlamalar") | F.text.contains("Настройки") | F.text.contains("Settings"))
 async def menu_tools(message: Message):
     await message.answer(
         "⚙️ **Sozlamalar / Настройки:**\n\nTilni o'zgartirish uchun pastdagi tugmalardan birini tanlang:",
         reply_markup=get_lang_inline()
     )
 
-# --- Render Health Check va Main ---
 async def handle(request):
     return web.Response(text="Bolajon Bot 24/7 rejimida muvaffaqiyatli ishlamoqda!")
 
@@ -289,4 +214,3 @@ if __name__ == "__main__":
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         logging.info("Bot to'xtatildi!")
-
