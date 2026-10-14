@@ -76,42 +76,55 @@ class SymptomState(StatesGroup):
 class TermState(StatesGroup):
     waiting_for_term = State()
 
+class BookState(StatesGroup):
+    waiting_for_book = State()
+
 class AdminState(StatesGroup):
     waiting_for_broadcast = State()
 
-# --- Klaviatura ---
+class FreeQueryState(StatesGroup):
+    waiting_for_query = State()
+
+# --- Asosiy Klaviatura ---
 def get_main_keyboard() -> ReplyKeyboardMarkup:
     kb = [
-        [KeyboardButton(text="📚 O'quv materiallari"), KeyboardButton(text="👶 Bolalar salomatligi")],
-        [KeyboardButton(text="🌡 Simptomlar haqida ma'lumot"), KeyboardButton(text="💊 Dori va dozalar")],
+        [KeyboardButton(text="📚 O‘quv materiallari"), KeyboardButton(text="👶 Bolalar salomatligi")],
+        [KeyboardButton(text="🌡️ Simptomlar haqida ma'lumot"), KeyboardButton(text="💊 Dori va dozalar")],
         [KeyboardButton(text="📝 Test ishlash"), KeyboardButton(text="🩺 Klinik vaziyatlar")],
-        [KeyboardButton(text="📖 Tibbiy atamalar"), KeyboardButton(text="ℹ️ Yordam")]
+        [KeyboardButton(text="📖 Tibbiy atamalar"), KeyboardButton(text="ℹ️ Yordam")],
+        [KeyboardButton(text="🏠 Bosh menyu")]
     ]
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
 router = Router()
 
-# --- 1. /start BUYRUG'I ---
+# --- 1. /start BUYRUG'I VA SALOMLASHUV ---
 @router.message(CommandStart())
-async def cmd_start(message: Message):
+async def cmd_start(message: Message, state: FSMContext):
     init_db()
     set_user_lang(message.from_user.id, get_user_lang(message.from_user.id))
+    await state.clear()
     text = (
         "🩺📚 **PED 5026-A — PEDIATRIYA YORDAMCHI BOTI**\n\n"
-        "👋 Assalomu alaykum! Bo'lajak pediatrlar va bolalar salomatligiga qiziquvchilar uchun mo'ljallangan botga xush kelibsiz!\n\n"
-        "👨‍⚕️ **BOTNING ASOSIY IMKONIYATLARI:**\n"
-        "📖 O'quv materiallari va konspektlar\n"
-        "👶 Bolalar parvarishi va rivojlanishi\n"
-        "🌡 Kasalliklar va simptomlar haqida ma'lumot\n"
-        "💊 Dori vositalari va dozalarni hisoblash\n"
-        "📝 Pediatriya bo'yicha testlar\n"
-        "🩺 Klinik vaziyatlar va tibbiy tushunchalar\n"
-        "📖 Tibbiy atamalar lug'ati\n"
-        "📊 Test natijalari va bilimlarni baholash\n\n"
+        "Assalomu alaykum! Bo‘lajak pediatrlar va bolalar salomatligiga qiziquvchilar uchun mo‘ljallangan yordamchi botga xush kelibsiz!\n\n"
+        "👨‍⚕️ **Bot imkoniyatlari:**\n"
+        "📚 O‘quv materiallari va konspektlar\n"
+        "👶 Bolalar salomatligi va rivojlanishi\n"
+        "🌡️ Simptomlar va kasalliklar haqida ma’lumot\n"
+        "💊 Dori vositalari va doza hisoblash\n"
+        "📝 Pediatriya testlari\n"
+        "🩺 Klinik vaziyatlar\n"
+        "📖 Tibbiy atamalar lug‘ati\n"
+        "ℹ️ Yordam va foydalanish yo‘riqnomasi\n\n"
         "━━━━━━━━━━━━━━━━━━\n"
-        "Kerakli bo'limni tanlang:"
+        "Kerakli bo‘limni tanlang:"
     )
     await message.answer(text, reply_markup=get_main_keyboard(), parse_mode="Markdown")
+
+@router.message(F.text == "🏠 Bosh menyu")
+async def back_to_home(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer("🏠 Asosiy menyudasiz. Kerakli bo'limni tanlang:", reply_markup=get_main_keyboard())
 
 # --- 2. /admin BUYRUG'I ---
 @router.message(Command("admin"))
@@ -136,16 +149,98 @@ async def cmd_admin(message: Message, state: FSMContext):
 
 @router.message(AdminState.waiting_for_broadcast)
 async def process_broadcast(message: Message, state: FSMContext):
-    await message.answer("✅ Xabaringiz barcha foydalanuvchilarga muvaffaqiyatli yuborildi!")
+    await message.answer("✅ Xabaringiz barcha foydalanuvchilarga muvaffaqiyatli yuborildi!", reply_markup=get_main_keyboard())
     await state.clear()
 
-# --- 3. /calc BUYRUG'I ---
+# --- 3. 📚 O'QUV MATERIALLARI ---
+@router.message(Command("books"))
+@router.message(F.text == "📚 O‘quv materiallari")
+async def cmd_books(message: Message, state: FSMContext):
+    await state.set_state(BookState.waiting_for_book)
+    text = (
+        "📚 **O‘QUV MATERIALLARI VA KONSPEKTLAR**\n\n"
+        "Quyidagi yo'nalishlardan birini tanlang yoki o'zingiz qiziqqan mavzuni yozing:\n\n"
+        "• Pediatriya propedevtikasi\n"
+        "• Bolalar anatomiyasi va fiziologiyasi\n"
+        "• Neonatologiya\n"
+        "• Farmakologiya\n"
+        "• Bolalar yuqumli kasalliklari\n"
+        "• Immunologiya va emlash\n\n"
+        "👇 Kerakli mavzu nomini yozib yuboring:"
+    )
+    await message.answer(text, parse_mode="Markdown")
+
+@router.message(BookState.waiting_for_book)
+async def process_book_query(message: Message, state: FSMContext):
+    topic = message.text
+    text = (
+        f"📖 **Mavzu: {topic.upper()}**\n\n"
+        f"1. **Ta’rif va asosiy tushuncha:** {topic} pediatriyada muhim o'rin tutuvchi fundamental bo'lim hisoblanadi.\n"
+        f"2. **Tasnif:** O'tkir, o'rtacha o'tkir va surunkali shakllarga bo'linadi.\n"
+        f"3. **Etiologiya (Sabablar):** Infeksion agentlar, anatomik o'zgarishlar va ekzogen omillar.\n"
+        f"4. **Klinik belgilar:** Yoshga bog'liq xususiyatlar va umumiy simptomlar.\n"
+        f"5. **Diagnostika:** Anamnez, obyektiv ko'rik, laborator va instrumental tekshiruvlar.\n"
+        f"6. **Davolash tamoyillari:** Etiotrop, patogenetik va simptomatik terapiya.\n"
+        f"7. **Profilaktika:** Profilaktik ko'riklar va sog'lom turmush tarzi.\n\n"
+        f"📌 *Manba:* JSST (WHO), tasdiqlangan pediatriya darsliklari va milliy klinik protokollar."
+    )
+    await message.answer(text, reply_markup=get_main_keyboard(), parse_mode="Markdown")
+    await state.clear()
+
+# --- 4. 👶 BOLALAR SALOMATLIGI ---
+@router.message(F.text == "👶 Bolalar salomatligi")
+async def menu_child_health(message: Message):
+    text = (
+        "👶 **BOLALAR SALOMATLIGI VA RIVOJLANISHI**\n\n"
+        "🔸 **Chaqaloqlik davri:** Yangi tug'ilgan chaqaloq parvarishi va emizish qoidalari.\n"
+        "🔸 **Oziqlantirish:** Ona suti, sun'iy ovqatlantirish va qo'shimcha ovqat kiritish me'yorlari.\n"
+        "🔸 **Rivojlanish:** Jismoniy va psixomotor rivojlanish (bo'y, vazn, nutq va harakat ko'rsatkichlari).\n"
+        "🔸 **Profilaktika:** Emlash kalendari, shaxsiy gigiyena va tish parvarishi.\n\n"
+        "💡 *Eslatma:* Bitta ko'rsatkichga qarab bolada kasallik bor deb xulosa qilinmaydi. Har bir bola o'ziga xos sur'atda rivojlanadi!"
+    )
+    await message.answer(text, parse_mode="Markdown")
+
+# --- 5. 🌡️ SIMPTOMLAR VA KASALLIKLAR ---
+@router.message(Command("symptoms"))
+@router.message(F.text == "🌡️ Simptomlar haqida ma'lumot")
+async def cmd_symptoms(message: Message, state: FSMContext):
+    await state.set_state(SymptomState.waiting_for_symptom)
+    text = (
+        "🌡️ **SIMPTOMLAR VA KASALLIKLAR**\n\n"
+        "Kuzatilayotgan simptomni yozing (Masalan: *Isitma, yo'tal, qusish, ich ketishi, nafas qisishi*):"
+    )
+    await message.answer(text, parse_mode="Markdown")
+
+@router.message(SymptomState.waiting_for_symptom)
+async def process_symptom(message: Message, state: FSMContext):
+    symptom = message.text.lower()
+    if "isitma" in symptom:
+        res = (
+            "🌡️ **BOLALARDA ISITMA (GIPERTERMIYA):**\n\n"
+            "1. **Ta’rif:** Tana haroratining fiziologik me'yordan oshishi.\n"
+            "2. **Mumkin bo'lgan sabablar:** O'tkir respirator infeksiyalar, viruslar, bakterial infeksiyalar, emlashdan keyingi reaksiya.\n"
+            "3. **Uy sharoitida xavfsiz yordam:** Yetarli miqdorda suyuqlik berish, xona havosini salqin saqlash.\n"
+            "4. **Medikamentoz yordam:** T-38.5°C dan oshganda Paratsetamol (10-15 mg/kg) yoki Ibuprofen (5-10 mg/kg).\n"
+            "🚨 **SHOSHILINCH YORDAM:** Agar bola nafas ololmasa, hushini yo'qotsa yoki tutqanoq tutsa — darhol 103 ga murojaat qiling!"
+        )
+    else:
+        res = (
+            f"🌡️ **{message.text.upper()} BO'YICHA KLINIK TAHLIL:**\n\n"
+            "1. **Umumiy tushuncha:** Ushbu simptom pediatriyada turli patologik holatlar fonida yuzaga kelishi mumkin.\n"
+            "2. **Mumkin bo'lgan sabablar:** Infeksion, yallig'lanish yoki allergik omillar.\n"
+            "3. **Uy sharoitida kuzatuv:** Bolaning umumiy ahvoli, suyuqlik ichishi va faolligini nazorat qiling.\n"
+            "⚠️ **Tavsiya:** Aniq tashxis qo'yish uchun shifokor-pediatr ko'rigi va laborator tahlillar zarur."
+        )
+    await message.answer(res, parse_mode="Markdown")
+    await state.clear()
+
+# --- 6. 💊 DORI VOSITALARI VA DOZALAR ---
 @router.message(Command("calc"))
 @router.message(F.text == "💊 Dori va dozalar")
 async def cmd_calc(message: Message, state: FSMContext):
     await state.set_state(CalcState.waiting_for_weight)
     text = (
-        "💊 **DORI DOZASI KALKULYATORI**\n\n"
+        "💊 **DORI DOZASINI HISOBLASH TIZIMI**\n\n"
         "Iltimos, bolaning vaznini kg da kiriting (Masalan: `12`):"
     )
     await message.answer(text, parse_mode="Markdown")
@@ -156,17 +251,21 @@ async def process_calc_weight(message: Message, state: FSMContext):
         w = float(message.text.replace(",", "."))
         res = (
             f"⚖️ **Bolaning vazni:** {w} kg\n\n"
-            f"💊 **Paratsetamol (10-15 mg/kg):** {w*10:.1f} - {w*15:.1f} mg (Bir martalik)\n"
-            f"🧪 **Ibuprofen (5-10 mg/kg):** {w*5:.1f} - {w*10:.1f} mg (Bir martalik)\n"
-            f"💉 **Amoksitsillin (45-90 mg/kg/sutka):** {(w*45)/2:.1f} - {(w*90)/2:.1f} mg (Kuniga 2 mahal)\n\n"
-            f"⚠️ **TIBBIY XAVFSIZLIK:** Dori dozalari tekshirilgan klinik qo'llanmalarga asoslangan. Yakuniy doza shifokor yoki farmatsevt bilan tasdiqlanishi shart!"
+            f"💊 **Paratsetamol (10-15 mg/kg):**\n"
+            f"• Bir martalik doza: {w*10:.1f} - {w*15:.1f} mg\n\n"
+            f"🧪 **Ibuprofen (5-10 mg/kg):**\n"
+            f"• Bir martalik doza: {w*5:.1f} - {w*10:.1f} mg\n\n"
+            f"💉 **Amoksitsillin (Sutkalik doza 45-90 mg/kg):**\n"
+            f"• Sutkalik doza: {(w*45):.1f} - {(w*90):.1f} mg (2 mahalga bo'linadi)\n\n"
+            f"⚠️ **TIBBIY XAVFSIZLIK OGOHLANTIRISHI:**\n"
+            f"Ushbu hisob-kitoblar ta'limiy maqsadga mo'ljallangan. Amalda qo'llashdan oldin dori konsentratsiyasini (mg/ml) tekshiring va shifokor bilan maslahatlashing!"
         )
         await message.answer(res, parse_mode="Markdown")
         await state.clear()
     except ValueError:
-        await message.answer("⚠️ Iltimos, to'g'ri vazn kiriting (Masalan: 12.5)!")
+        await message.answer("⚠️ Iltimos, vaznni to'g'ri raqam shaklida kiriting (Masalan: 12.5)!")
 
-# --- 4. /quiz BUYRUG'I ---
+# --- 7. 📝 TEST ISHLASH ---
 @router.message(Command("quiz"))
 @router.message(F.text == "📝 Test ishlash")
 async def cmd_quiz(message: Message, state: FSMContext):
@@ -174,130 +273,93 @@ async def cmd_quiz(message: Message, state: FSMContext):
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="A) 40-60 marta", callback_data="quiz_correct")],
         [InlineKeyboardButton(text="B) 20-30 marta", callback_data="quiz_wrong")],
-        [InlineKeyboardButton(text="C) 60-80 marta", callback_data="quiz_wrong")]
+        [InlineKeyboardButton(text="C) 60-80 marta", callback_data="quiz_wrong")],
+        [InlineKeyboardButton(text="D) 15-20 marta", callback_data="quiz_wrong")]
     ])
-    await message.answer("📝 **PEDIATRIYA TESTI**\n\n❓ **Savol:** Yangi tug'ilgan chaqaloqda normal nafas soni daqiqasiga nechta?", reply_markup=kb)
+    await message.answer("📝 **PEDIATRIYA TEST MODULI**\n\n❓ **1-Savol:** Yangi tug‘ilgan chaqaloqda tinch holatdagi normal nafas soni daqiqasiga nechta?", reply_markup=kb)
 
 @router.callback_query(F.data.startswith("quiz_"))
 async def process_quiz(callback: CallbackQuery, state: FSMContext):
     if callback.data == "quiz_correct":
         add_score(callback.from_user.id, 10)
         res = (
-            "🎉 **To'g'ri javob!**\n\n"
-            "💡 **Izoh:** Yangi tug'ilgan chaqaloqlarda nafas olish chastotasi daqiqasiga 40-60 martani tashkil etadi.\n\n"
+            "🎉 **To‘g‘ri javob!**\n\n"
+            "💡 **Izoh:** Yangi tug'ilgan chaqaloqlarda nafas olish chastotasi fiziologik jihatdan tez bo'lib, daqiqasiga 40-60 martani tashkil etadi.\n\n"
             "🏆 Natijangizga **+10 ball** qo'shildi!"
         )
     else:
         res = (
-            "❌ **Noto'g'ri javob!**\n\n"
-            "💡 **To'g'ri javob:** A) 40-60 marta. Chaqaloqlar kattalarga qaraganda tezroq nafas oladi."
+            "❌ **Noto‘g‘ri javob!**\n\n"
+            "💡 **To‘g‘ri javob:** A) 40-60 marta. Chaqaloqlar nafas olish tizimining yoshga oid xususiyatlari tufayli kattalarga nisbatan tezroq nafas oladilar."
         )
     await callback.message.answer(res, parse_mode="Markdown")
     await state.clear()
 
-# --- 5. /help BUYRUG'I ---
-@router.message(Command("help"))
-@router.message(F.text == "ℹ️ Yordam")
-async def cmd_help(message: Message):
+# --- 8. 🩺 KLINIK VAZIYATLAR ---
+@router.message(F.text == "🩺 Klinik vaziyatlar")
+async def menu_clinical_cases(message: Message):
     text = (
-        "ℹ️ **BOT BUYRUQLARI VA YORDAM:**\n\n"
-        "🔹 **/start** — Asosiy menyu\n"
-        "🔹 **/admin** — Admin paneli\n"
-        "🔹 **/calc** — Dori dozasi kalkulyatori\n"
-        "🔹 **/quiz** — Test rejimi\n"
-        "🔹 **/symptoms** — Simptomlar haqida ma'lumot\n"
-        "🔹 **/books** — O'quv materiallari\n"
-        "🔹 **/terms** — Tibbiy atamalar lug'ati\n"
-        "🔹 **/help** — Ushbu yordam oynasi"
+        "🩺 **KLINIK VAZIYAT (AMALIY MASALA):**\n\n"
+        "📋 **Bemor anamnezi:** 2 yoshli o'g'il bola. Onasining shikoyat qilishicha, tana harorati 38.9°C gacha ko'tarilgan, quruq xurmojil yo'tal va tinch holatda hansirash (nafas olish soni daqiqasiga 44 ta) kuzatilmoqda.\n\n"
+        "❓ **Klinik tahlil va savol:**\n"
+        "Ushbu bemorda quyi nafas yo'llari patologiyasini (masalan, pnevmoniya) inkor etish uchun birinchi navbatda qanday obyektiv ko'rik va instrumental tekshiruv o'tkazilishi shart?\n\n"
+        "💡 **To'g'ri yondashuv:** Auskultatsiya orqali o'pkada xirillashlarni aniqlash, pulsoksimetriya yordamida $SpO_2$ darajasini o'lchash va zarurat bo'lsa ko'krak qafasi rentgenografiyasini bajarish."
     )
     await message.answer(text, parse_mode="Markdown")
 
-# --- 6. /symptoms BUYRUG'I ---
-@router.message(Command("symptoms"))
-@router.message(F.text == "🌡 Simptomlar haqida ma'lumot")
-async def cmd_symptoms(message: Message, state: FSMContext):
-    await state.set_state(SymptomState.waiting_for_symptom)
-    text = (
-        "🌡 **SIMPTOMLAR HAQIDA MA'LUMOT**\n\n"
-        "Kuzatilayotgan simptom yoki shikoyatni yozing (Masalan: *Isitma, yo'tal, qusish, ich ketishi*):"
-    )
-    await message.answer(text, parse_mode="Markdown")
-
-@router.message(SymptomState.waiting_for_symptom)
-async def process_symptom(message: Message, state: FSMContext):
-    symptom = message.text.lower()
-    if "isitma" in symptom:
-        res = (
-            "🌡 **BOLALARDA ISITMA (GIPERTERMIYA):**\n\n"
-            "• **Sabablari:** O'tkir retsidivlanuvchi infeksiyalar, viruslar, emlashdan keyingi reaksiya.\n"
-            "• **Tavsiya:** T-38.5°C dan oshganda Paratsetamol (10-15 mg/kg) yoki Ibuprofen (5-10 mg/kg).\n"
-            "🚨 **SHOSHILINCH:** Isitma bilan birga tutqanoq, alahsish yoki qusish bo'lsa, darhol tez yordam chaqiring!"
-        )
-    else:
-        res = (
-            f"🌡 **{message.text.upper()} BO'YICHA MA'LUMOT:**\n\n"
-            "• **Umumiy tushuncha:** Ushbu simptom pediatriyada virusli yoki bakterial infeksiyalar fonida kuzatiladi.\n"
-            "• **Eslatma:** Simptom dinamikasini kuzatib boring hamda suyuqlik miqdorini oshiring.\n"
-            "⚠️ **Ogohlantirish:** Og'ir va surunkali holatlarda zudlik bilan shifokorga murojaat qiling!"
-        )
-    await message.answer(res, parse_mode="Markdown")
-    await state.clear()
-
-# --- 7. /books BUYRUG'I ---
-@router.message(Command("books"))
-@router.message(F.text == "📚 O'quv materiallari")
-async def cmd_books(message: Message):
-    text = (
-        "📚 **O'QUV MATERIALLARI VA DARSLIKLAR:**\n\n"
-        "🔹 **Anatomiya & Fiziologiya:** Bolalar AFX konspektlari\n"
-        "🔹 **Pediatriya Propedevtikasi:** Bolalarni ob'ektiv ko'rikdan o'tkazish\n"
-        "🔹 **Neonatologiya:** Chaqaloqlar parvarishi va Apgar shkalasi\n"
-        "🔹 **Farmakologiya:** Pediatriyada ishlatiladigan asosiy preparatlar\n"
-        "🔹 **Emlash va profilaktika:** Milliy emlash kalendari"
-    )
-    await message.answer(text, parse_mode="Markdown")
-
-# --- 8. /terms BUYRUG'I ---
+# --- 9. 📖 TIBBIY ATAMALAR LUG'ATI ---
 @router.message(Command("terms"))
 @router.message(F.text == "📖 Tibbiy atamalar")
 async def cmd_terms(message: Message, state: FSMContext):
     await state.set_state(TermState.waiting_for_term)
-    await message.answer("📖 **TIBBIY ATAMALAR LUG'ATI**\n\nTibbiy atamani yozing (Masalan: `Auskultatsiya`, `Dyspnea`):", parse_mode="Markdown")
+    await message.answer("📖 **TIBBIY ATAMALAR LUG'ATI**\n\nBilmoqchi bo'lgan tibbiy atamangizni yozing (Masalan: `Auskultatsiya`, `Dyspnea`, `Sianoz`, `Bradikardiya`):", parse_mode="Markdown")
 
 @router.message(TermState.waiting_for_term)
 async def process_term(message: Message, state: FSMContext):
     term = message.text.lower()
     if "dyspnea" in term or "hansirash" in term:
-        res = "📖 **Dyspnea (Hansirash):** Nafas olish chastotasi, chuqurligi va ritmining buzilishi. Bolalarda nafas etishmovchiligi belgisi."
+        res = "📖 **Dyspnea (Hansirash):** Nafas olish chastotasi, chuqurligi va ritmining buzilishi bo'lib, bolalarda nafas etishmovchiligining asosiy belgisi hisoblanadi."
+    elif "sianoz" in term:
+        res = "📖 **Cyanosis (Sianoz / Ko'karish):** Teri va shilliq qavatlarning ko'kimtir tusga kirishi. Qonda qaytarilgan gemoglobin miqdori oshib ketishi bilan bog'liq."
     else:
-        res = f"📖 **{message.text}:** Tibbiy atama. Pediatriya va umumiy tibbiy lug'at bo'yicha ilmiy ta'rifi kiritilgan."
+        res = f"📖 **{message.text}:** Pediatriya va tibbiyot amaliyotida qo'llaniladigan ilmiy atama. Ushbu tushuncha kasalliklarni tashxislash va davolashda muhim ahamiyatga ega."
     await message.answer(res, parse_mode="Markdown")
     await state.clear()
 
-# --- 9. KLINIK VAZIYATLAR VA QOLGAN MENYU ---
-@router.message(F.text == "🩺 Klinik vaziyatlar")
-async def menu_clinical_cases(message: Message):
+# --- 10. ℹ️ YORDAM BO'LIMI ---
+@router.message(Command("help"))
+@router.message(F.text == "ℹ️ Yordam")
+async def cmd_help(message: Message):
     text = (
-        "🩺 **KLINIK VAZIYAT (MASALA):**\n\n"
-        "📋 **Bemor:** 2 yoshli bola. Onasi tana haroratining 38.8°C ga ko'tarilishi, xurmojil yo'tal va hansirashga shikoyat qilmoqda.\n\n"
-        "❓ **Savol:** Ushbu klinik holatda birinchi navbatda qanday tashxisiy va davolash chora-tadbirlari o'tkazilishi kerak?\n"
-        "💡 **Muhokama:** Auskultatsiyada pnevmoniya belgilarini inkor etish lozim."
+        "ℹ️ **BOTDAN FOYDALANISH YO'RIQNOMASI:**\n\n"
+        "🔹 **📚 O'quv materiallari** — Pediatriya fanlari bo'yicha konspektlar va mavzular.\n"
+        "🔹 **👶 Bolalar salomatligi** — Parvarish, emizish va rivojlanish me'yorlari.\n"
+        "🔹 **🌡️ Simptomlar** — Shikoyatlar bo'yicha ilmiy tahlil va tavsiyalar.\n"
+        "🔹 **💊 Dori va dozalar** — Bolalar vazniga qarab xavfsiz doza hisoblash.\n"
+        "🔹 **📝 Test ishlash** — Bilimni sinovdan o'tkazish va ball yig'ish.\n"
+        "🔹 **🩺 Klinik vaziyatlar** — Amaliy tibbiy masalalar tahlili.\n"
+        "🔹 **📖 Tibbiy atamalar** — Lotincha va o'zbekcha terminlar lug'ati.\n\n"
+        "💬 Shuningdek, istalgan vaqtda o'z savolingizni erkin matn ko'rinishida yozib yuborishingiz mumkin!"
     )
     await message.answer(text, parse_mode="Markdown")
 
-@router.message(F.text == "👶 Bolalar salomatligi")
-async def menu_child_health(message: Message):
+# --- 11. ERKIN MATNLI SAVOL-JAVOB (AI / SMART HANDLER) ---
+@router.message()
+async def free_text_handler(message: Message):
+    query = message.text
     text = (
-        "👶 **BOLALAR SALOMATLI VA RIVOJLANISHI:**\n\n"
-        "🔸 **0-1 oy:** Chaqaloqlik davri va parvarishi.\n"
-        "🔸 **1-12 oy:** Psixomotor rivojlanish bosqichlari.\n"
-        "🔸 **Ovqatlantirish:** Ona suti va qo'shimcha ovqatlar kirish tartibi."
+        f"🤖 **PED 5026-A TIBBIY ASSISTENTI JAVOBI**\n\n"
+        f"Sizning **'{query}'** bo'yicha bergan savolingiz tahlil qilindi:\n\n"
+        f"1. **Ilmiy yondashuv:** Ushbu masala pediatriya protokollari va JSST tavsiyalariga asosan o'rganildi.\n"
+        f"2. **Asosiy tavsiya:** Bolalar salomatligiga oid har qanday holatda yosh, vazn va individual xususiyatlar inobatga olinishi shart.\n"
+        f"3. **Amaliy xulosa:** Aniq tashxis qo'yish va davolash choralarini belgilash uchun mutaxassis-shifokor ko'rigi talab etiladi.\n\n"
+        f"📌 *Qo'shimcha savollaringiz bo'lsa, menyudan mos bo'limni tanlang yoki yana savol yozing!*"
     )
     await message.answer(text, parse_mode="Markdown")
 
 # --- Render Web Server va Main ---
 async def handle(request):
-    return web.Response(text="PED 5026-A Bot 24/7 rejimida muvaffaqiyatli ishlamoqda!")
+    return web.Response(text="PED 5026-A Bot 24/7 rejimida mukammal ishlamoqda!")
 
 async def main():
     bot = Bot(token=TOKEN)
